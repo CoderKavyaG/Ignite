@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- Premium Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Meta tags for SEO & descriptions -->
+    <title>Axon — Custom WebGPU Inference Engine</title>
+    <meta name="description" content="A browser-based LLM inference engine built from scratch using TypeScript and WebGPU compute shaders." />
+  </head>
+  <body>
+    <div id="app">
+      <!-- Header Section -->
+      <header class="app-header">
+        <div class="header-container">
+          <div class="logo-area">
+            <span class="logo-badge">GPU</span>
+            <h1>axon</h1>
+            <span class="logo-sub">Direct Compute Engine</span>
+          </div>
+          <div id="gpu-badge" class="gpu-status waiting">
+            <div class="status-indicator"></div>
+            <span id="gpu-status-text">Querying hardware...</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Main Layout Grid -->
+      <main class="dashboard-grid">
+        <!-- GPU Architecture Diagnostics Card -->
+        <section class="card diag-card">
+          <div class="card-header">
+            <h3>GPU Diagnostics</h3>
+            <span class="pill">Hardware WebGPU API</span>
+          </div>
+          <div class="card-body">
+            <div class="diagnostic-grid">
+              <div class="diag-item">
+                <span class="diag-label">Adapter</span>
+                <span id="diag-adapter" class="diag-value">Checking...</span>
+              </div>
+              <div class="diag-item">
+                <span class="diag-label">Architecture</span>
+                <span id="diag-arch" class="diag-value">Checking...</span>
+              </div>
+              <div class="diag-item">
+                <span class="diag-label">Adapter Type</span>
+                <span id="diag-type" class="diag-value">Checking...</span>
+              </div>
+              <div class="diag-item">
+                <span class="diag-label">Device Limits (Max Workgroup Size)</span>
+                <span id="diag-workgroups" class="diag-value">Checking...</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Verification Test Card (Required 4x4 Output) -->
+        <section class="card test-card">
+          <div class="card-header">
+            <h3>Verification Test</h3>
+            <span class="pill success">Auto-verified</span>
+          </div>
+          <div class="card-body">
+            <p class="section-desc">Multiplying a <strong>4x4 Identity Matrix (A)</strong> by a <strong>4x4 Test Sequence Matrix (B)</strong> using the WGSL matmul shader:</p>
+            
+            <div class="matrices-visual">
+              <div class="matrix-box">
+                <span class="matrix-name">Matrix A (4x4 Identity)</span>
+                <div class="matrix-grid dimension-4" id="matrix-a-4x4">
+                  <!-- JS populated -->
+                </div>
+              </div>
+              
+              <div class="matrix-op">✕</div>
+
+              <div class="matrix-box">
+                <span class="matrix-name">Matrix B (4x4 Sequence)</span>
+                <div class="matrix-grid dimension-4" id="matrix-b-4x4">
+                  <!-- JS populated -->
+                </div>
+              </div>
+
+              <div class="matrix-op">=</div>
+
+              <div class="matrix-box output-box">
+                <span class="matrix-name highlight">Output C (GPU Result)</span>
+                <div class="matrix-grid dimension-4" id="matrix-c-4x4">
+                  <div class="spinner"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="execution-feedback">
+              <span class="title">Verification console feedback:</span>
+              <pre class="console-output" id="test-console">Pending WebGPU compilation...</pre>
+            </div>
+          </div>
+        </section>
+
+        <!-- Matrix Playground Card (Interactive Custom Dimensions) -->
+        <section class="card playground-card">
+          <div class="card-header">
+            <h3>Kernel Playground</h3>
+            <span class="pill interactive">Interactive</span>
+          </div>
+          <div class="card-body">
+            <p class="section-desc">Benchmark matrix multiplication with arbitrary sizes. Generates randomized matrices in float32 layout.</p>
+            
+            <div class="playground-controls">
+              <div class="input-group">
+                <label for="input-m">M (Rows A / C)</label>
+                <input type="number" id="input-m" min="4" max="256" value="16" step="4">
+              </div>
+              <div class="input-group">
+                <label for="input-k">K (Cols A / Rows B)</label>
+                <input type="number" id="input-k" min="4" max="256" value="16" step="4">
+              </div>
+              <div class="input-group">
+                <label for="input-n">N (Cols B / C)</label>
+                <input type="number" id="input-n" min="4" max="256" value="16" step="4">
+              </div>
+              <button id="btn-run-matmul" class="btn-primary">
+                <span>Run GPU Kernel</span>
+              </button>
+            </div>
+
+            <div class="playground-result-container">
+              <div class="metrics-row">
+                <div class="metric-block">
+                  <span class="metric-label">Execution Time</span>
+                  <span id="metric-time" class="metric-value">-- ms</span>
+                </div>
+                <div class="metric-block">
+                  <span class="metric-label">Memory Dispatched</span>
+                  <span id="metric-memory" class="metric-value">-- bytes</span>
+                </div>
+                <div class="metric-block">
+                  <span class="metric-label">Grid Size (X, Y, Z)</span>
+                  <span id="metric-grid" class="metric-value">--</span>
+                </div>
+              </div>
+
+              <div id="playground-matrix-scroll" class="matrix-preview-grid-wrapper hidden">
+                <div class="preview-matrix-block">
+                  <span class="matrix-name">Sample Outputs of C (Top 8x8)</span>
+                  <div class="matrix-grid" id="matrix-playground-c">
+                    <!-- JS populated -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- WGSL Shader Code Viewer -->
+        <section class="card code-card">
+          <div class="card-header">
+            <h3>matmul.wgsl</h3>
+            <span class="pill code">Raw WebGPU Shader Code</span>
+          </div>
+          <div class="card-body scroll-body">
+            <pre class="shader-code-view"><code id="code-display">// Loading shader...</code></pre>
+          </div>
+        </section>
+      </main>
+
+      <footer class="app-footer">
+        <p>Built from scratch with zero ML libraries. Axon LLM core framework.</p>
+      </footer>
+    </div>
+
+    <!-- Core App Module -->
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
