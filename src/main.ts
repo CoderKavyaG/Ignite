@@ -1,6 +1,9 @@
 import './style.css';
 import { initWebGPU } from './gpu/device';
 import { matmul } from './kernels/matmul';
+import { softmax } from './kernels/softmax';
+import { rmsnorm } from './kernels/layernorm';
+import { elementwise } from './kernels/elementwise';
 import matmulShader from './shaders/matmul.wgsl?raw';
 
 // Get DOM elements
@@ -158,6 +161,23 @@ async function runApplication() {
     const endTime = performance.now();
     const elapsed = endTime - startTime;
 
+    // --- Softmax Verification ---
+    const softmaxInput = new Float32Array([1.0, 2.0, 3.0]);
+    const softmaxOutput = await softmax(device, softmaxInput);
+    const softmaxSum = softmaxOutput.reduce((acc, v) => acc + v, 0);
+
+    // --- RMSNorm Verification ---
+    const rmsInput = new Float32Array([1.0, 2.0, 3.0, 4.0]);
+    const rmsWeight = new Float32Array([1.0, 1.0, 1.0, 1.0]);
+    const rmsOutput = await rmsnorm(device, rmsInput, rmsWeight);
+
+    // --- Elementwise Verification ---
+    const elemA = new Float32Array([1.0, 2.0, 3.0]);
+    const elemB = new Float32Array([4.0, 5.0, 6.0]);
+    const siluOutput = await elementwise(device, elemA, null, 0);
+    const addOutput = await elementwise(device, elemA, elemB, 1);
+    const mulOutput = await elementwise(device, elemA, elemB, 2);
+
     // Log the requested log to verify correctness to the user environment console
     console.log("-----------------------------------------");
     console.log("AXON WebGPU 4x4 Matmul Verification Test Result:");
@@ -165,6 +185,9 @@ async function runApplication() {
     console.log("Matrix B (Test Sequence 4x4):\n", matrixB_4x4);
     console.log("Matrix C (GPU Result 4x4):\n", resultC_4x4);
     console.log(`Execution time: ${elapsed.toFixed(3)} ms`);
+    console.log("Softmax Verification: [1.0, 2.0, 3.0] ->", softmaxOutput, "Sum:", softmaxSum);
+    console.log("RMSNorm Verification: [1.0, 2.0, 3.0, 4.0] ->", rmsOutput);
+    console.log("Elementwise Verification: SiLU:", siluOutput, "Add:", addOutput, "Multiply:", mulOutput);
     console.log("-----------------------------------------");
 
     // Display visually
@@ -175,9 +198,12 @@ async function runApplication() {
     if (testConsole) {
       testConsole.textContent =
         `Shader execution verified successfully!\n` +
-        `Result matching Matrix B: ${arraysEqual(resultC_4x4, matrixB_4x4) ? 'TRUE' : 'FALSE'}\n` +
-        `Float32 round-trip dispatch latency: ${elapsed.toFixed(3)} ms\n` +
-        `Output elements:\n[${resultC_4x4.join(', ')}]`;
+        `Matmul matches Matrix B: ${arraysEqual(resultC_4x4, matrixB_4x4) ? 'TRUE' : 'FALSE'} (latency: ${elapsed.toFixed(3)} ms)\n` +
+        `Softmax([1, 2, 3]): [${Array.from(softmaxOutput).map(v => v.toFixed(3)).join(', ')}] (Sum: ${softmaxSum.toFixed(2)})\n` +
+        `RMSNorm([1, 2, 3, 4]): [${Array.from(rmsOutput).map(v => v.toFixed(3)).join(', ')}]\n` +
+        `SiLU([1, 2, 3]): [${Array.from(siluOutput).map(v => v.toFixed(3)).join(', ')}]\n` +
+        `Elementwise Add: [${addOutput.join(', ')}]\n` +
+        `Elementwise Mul: [${mulOutput.join(', ')}]`;
     }
   } catch (err: any) {
     console.error("4x4 Matmul verification error:", err);
