@@ -61,6 +61,34 @@
           </div>
         </section>
 
+        <!-- Model Weights Loader Card -->
+        <section class="card loader-card">
+          <div class="card-header">
+            <h3>Model Weights Loader</h3>
+            <span class="pill primary">SmolLM2-135M</span>
+          </div>
+          <div class="card-body">
+            <p class="section-desc">Select a local SmolLM2 <code>.safetensors</code> weight file to extract structural headers and allocate parameters on GPU.</p>
+            <div class="loader-controls" style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
+              <input type="file" id="file-weights-input" accept=".safetensors" style="display: none;">
+              <label for="file-weights-input" class="btn-primary" style="display: block; width: 100%; text-align: center; cursor: pointer; padding: 12px; border-radius: 6px; box-sizing: border-box; background: var(--gradient-primary); color: white; font-weight: 500;">
+                Choose weights (.safetensors)
+              </label>
+              <div id="loader-status" class="status-indicator-text" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 5px;">No model loaded yet.</div>
+            </div>
+            <div id="loader-details" class="loader-details-panel" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border-color); display: none; flex-direction: column; gap: 8px;">
+              <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                <span style="color: var(--text-secondary);">Tensors Detected:</span>
+                <span id="detail-tensors-count" style="color: var(--text-primary); font-weight: 600;">0</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                <span style="color: var(--text-secondary);">Declared Sizing:</span>
+                <span id="detail-total-size" style="color: var(--text-primary); font-weight: 600;">0.00 MB</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- Verification Test Card (Required 4x4 Output) -->
         <section class="card test-card">
           <div class="card-header">

@@ -13,6 +13,7 @@ import {
   silu_mul as tensorSiluMul
 } from './kernels/ops';
 import { precomputeRoPETables, rope } from './kernels/rope';
+import { parseSafetensorsHeader, loadWeightsToGPU } from './model/loader';
 import matmulShader from './shaders/matmul.wgsl?raw';
 
 // Get DOM elements
@@ -27,6 +28,12 @@ const matrixAContainer = document.getElementById('matrix-a-4x4');
 const matrixBContainer = document.getElementById('matrix-b-4x4');
 const matrixCContainer = document.getElementById('matrix-c-4x4');
 const testConsole = document.getElementById('test-console');
+
+const fileWeightsInput = document.getElementById('file-weights-input') as HTMLInputElement;
+const loaderStatus = document.getElementById('loader-status');
+const loaderDetails = document.getElementById('loader-details');
+const detailTensorsCount = document.getElementById('detail-tensors-count');
+const detailTotalSize = document.getElementById('detail-total-size');
 
 const inputM = document.getElementById('input-m') as HTMLInputElement;
 const inputK = document.getElementById('input-k') as HTMLInputElement;
@@ -387,6 +394,89 @@ async function runApplication() {
 
   // Add click listener
   btnRunMatmul.addEventListener('click', runPlayground);
+
+  // -------------------------------------------------------------
+  // MODEL WEIGHTS FILE UPLOAD LISTENER
+  // -------------------------------------------------------------
+  if (fileWeightsInput) {
+    fileWeightsInput.addEventListener('change', async () => {
+      const files = fileWeightsInput.files;
+      if (!files || files.length === 0) return;
+
+      const file = files[0];
+      if (loaderStatus) {
+        loaderStatus.textContent = `Reading "${file.name}"...`;
+        loaderStatus.style.color = 'var(--text-secondary)';
+      }
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const buffer = e.target?.result as ArrayBuffer;
+        if (!buffer) {
+          if (loaderStatus) {
+            loaderStatus.textContent = "Error: Failed to read file data buffer.";
+            loaderStatus.style.color = 'var(--accent-error)';
+          }
+          return;
+        }
+
+        try {
+          if (loaderStatus) loaderStatus.textContent = "Parsing headers...";
+
+          const headerData = parseSafetensorsHeader(buffer);
+
+          let totalBytes = 0;
+          for (const meta of headerData.header.values()) {
+            totalBytes += meta.dataLength;
+          }
+          const totalSizeMB = totalBytes / (1024 * 1024);
+
+          if (loaderStatus) {
+            loaderStatus.textContent = "Uploading weights to GPU VRAM...";
+          }
+
+          const t0 = performance.now();
+          // Load weights to GPU
+          const weights = loadWeightsToGPU(device, buffer, headerData);
+          const t1 = performance.now();
+
+          if (loaderStatus) {
+            loaderStatus.textContent = `Loaded Successfully! (${(t1 - t0).toFixed(0)} ms)`;
+            loaderStatus.style.color = '#10b981'; // Green status success
+          }
+
+          if (loaderDetails) {
+            loaderDetails.style.display = 'flex';
+          }
+          if (detailTensorsCount) {
+            detailTensorsCount.textContent = `${headerData.header.size}`;
+          }
+          if (detailTotalSize) {
+            detailTotalSize.textContent = `${totalSizeMB.toFixed(2)} MB`;
+          }
+
+          // Reference the loaded weights globally to interact with in future inference steps
+          (window as any).loadedWeights = weights;
+
+        } catch (err: any) {
+          console.error("Safetensors parsing error:", err);
+          if (loaderStatus) {
+            loaderStatus.textContent = `Error: ${err.message}`;
+            loaderStatus.style.color = 'var(--accent-error)';
+          }
+        }
+      };
+
+      reader.onerror = () => {
+        if (loaderStatus) {
+          loaderStatus.textContent = "Error reading model file.";
+          loaderStatus.style.color = 'var(--accent-error)';
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+    });
+  }
 }
 
 // Kick off when window loads
