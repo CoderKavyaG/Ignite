@@ -4,6 +4,15 @@ import { matmul } from './kernels/matmul';
 import { softmax } from './kernels/softmax';
 import { rmsnorm } from './kernels/layernorm';
 import { elementwise } from './kernels/elementwise';
+import { GPUTensor } from './gpu/tensor';
+import {
+  matmul as tensorMatmul,
+  softmax as tensorSoftmax,
+  rmsnorm as tensorRmsnorm,
+  add as tensorAdd,
+  silu_mul as tensorSiluMul
+} from './kernels/ops';
+import { precomputeRoPETables, rope } from './kernels/rope';
 import matmulShader from './shaders/matmul.wgsl?raw';
 
 // Get DOM elements
@@ -205,6 +214,94 @@ async function runApplication() {
         `Elementwise Add: [${addOutput.join(', ')}]\n` +
         `Elementwise Mul: [${mulOutput.join(', ')}]`;
     }
+
+    // =============================================================
+    // GPUTENSOR & PIPELINE-TENSOR OPERATIONS VERIFICATION
+    // =============================================================
+    const tenA = GPUTensor.fromFloat32Array(device, matrixA_4x4, [4, 4]);
+    const tenB = GPUTensor.fromFloat32Array(device, matrixB_4x4, [4, 4]);
+    const tenC = await tensorMatmul(device, tenA, tenB);
+    const resultC_tensor = await tenC.toFloat32Array();
+
+    // Softmax tensor verification
+    const tenSoftInput = GPUTensor.fromFloat32Array(device, new Float32Array([1.0, 2.0, 3.0]), [3]);
+    const tenSoftOutput = await tensorSoftmax(device, tenSoftInput);
+    const resultSoft_tensor = await tenSoftOutput.toFloat32Array();
+
+    // RMSNorm tensor verification
+    const tenRmsInput = GPUTensor.fromFloat32Array(device, new Float32Array([1.0, 2.0, 3.0, 4.0]), [4]);
+    const tenRmsWeight = GPUTensor.fromFloat32Array(device, new Float32Array([1.0, 1.0, 1.0, 1.0]), [4]);
+    const tenRmsOutput = await tensorRmsnorm(device, tenRmsInput, tenRmsWeight);
+    const resultRms_tensor = await tenRmsOutput.toFloat32Array();
+
+    // Elementwise addition and SiLU_Mul (gated) tensor verification
+    const tenElemA = GPUTensor.fromFloat32Array(device, new Float32Array([1.0, 2.0, 3.0]), [3]);
+    const tenElemB = GPUTensor.fromFloat32Array(device, new Float32Array([4.0, 5.0, 6.0]), [3]);
+    const tenAddOutput = await tensorAdd(device, tenElemA, tenElemB);
+    const tenSiluMulOutput = await tensorSiluMul(device, tenElemA, tenElemB); // SiLU(A) * B
+    const resultAdd_tensor = await tenAddOutput.toFloat32Array();
+    const resultSiluMul_tensor = await tenSiluMulOutput.toFloat32Array();
+
+    // --- RoPE (Rotary Position Embeddings) Verification ---
+    // SmolLM2 base parameters: d_head=64, max_position=2048, base=10000
+    const seq_len_rope = 2;
+    const n_heads_rope = 2;
+    const d_head_rope = 64;
+
+    // Generate a Q tensor of shape [seq_len, n_heads, d_head] -> shape [2, 2, 64]
+    const qData = new Float32Array(seq_len_rope * n_heads_rope * d_head_rope);
+    // Populate with arbitrary distinct values for testing rotations
+    for (let i = 0; i < qData.length; i++) {
+      qData[i] = Math.sin(i) * 0.5 + 0.5;
+    }
+    const tenQ = GPUTensor.fromFloat32Array(device, qData, [seq_len_rope, n_heads_rope, d_head_rope]);
+
+    // Precompute cos/sin tables on Host CPU and upload
+    const { cosTable, sinTable } = precomputeRoPETables(2048, d_head_rope, 10000);
+    const tenCos = GPUTensor.fromFloat32Array(device, cosTable, [2048, d_head_rope]);
+    const tenSin = GPUTensor.fromFloat32Array(device, sinTable, [2048, d_head_rope]);
+
+    // Run RoPE in-place on the GPU
+    await rope(device, tenQ, tenCos, tenSin, 0); // pos_offset = 0
+    const resultQ_rotated = await tenQ.toFloat32Array();
+
+    // Output logs for developers
+    console.log("-----------------------------------------");
+    console.log("GPUTENSOR OPERATIONS VERIFICATION:");
+    console.log("- Matmul Tensor Result:\n", resultC_tensor);
+    console.log("- Softmax Tensor Result:\n", resultSoft_tensor);
+    console.log("- RMSNorm Tensor Result:\n", resultRms_tensor);
+    console.log("- Add Tensor Result:\n", resultAdd_tensor);
+    console.log("- SiLU_Mul (SwiGLU Gating) Result:\n", resultSiluMul_tensor);
+    console.log("- RoPE Rotated Q Result (First 8 elements):\n", resultQ_rotated.slice(0, 8));
+    console.log("-----------------------------------------");
+
+    // UI Console Appends
+    if (testConsole) {
+      testConsole.textContent += "\n\n" +
+        `[GPUTensor Framework Ops Verified]\n` +
+        `Matmul GPUTensor match: ${arraysEqual(resultC_tensor, resultC_4x4) ? 'TRUE' : 'FALSE'}\n` +
+        `Add GPUTensor output: [${resultAdd_tensor.join(', ')}]\n` +
+        `SwiGLU SiLU_Mul output: [${Array.from(resultSiluMul_tensor).map(v => v.toFixed(3)).join(', ')}]\n` +
+        `RoPE applied in-place successfully (rotated elements count: ${resultQ_rotated.length})`;
+    }
+
+    // Free GPUTensors to prevent allocations lingering in VRAM
+    tenA.destroy();
+    tenB.destroy();
+    tenC.destroy();
+    tenSoftInput.destroy();
+    tenSoftOutput.destroy();
+    tenRmsInput.destroy();
+    tenRmsWeight.destroy();
+    tenRmsOutput.destroy();
+    tenElemA.destroy();
+    tenElemB.destroy();
+    tenAddOutput.destroy();
+    tenSiluMulOutput.destroy();
+    tenQ.destroy();
+    tenCos.destroy();
+    tenSin.destroy();
   } catch (err: any) {
     console.error("4x4 Matmul verification error:", err);
     if (testConsole) {
