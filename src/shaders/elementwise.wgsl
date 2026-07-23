@@ -44,5 +44,10 @@ fn main(
   } else if (op == 2u) {
     // Elementwise multiply (SwiGLU gating layer)
     C[idx] = A[idx] * B[idx];
+  } else if (op == 3u) {
+    // SiLU_Mul (SwiGLU gating merge element): C[i] = SiLU(A[i]) * B[i]
+    let gate_val = A[idx];
+    let up_val = B[idx];
+    C[idx] = (gate_val / (1.0 + exp(-gate_val))) * up_val;
   }
 }
