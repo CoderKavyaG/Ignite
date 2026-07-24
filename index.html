@@ -1,210 +1,264 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    
-    <!-- Premium Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Meta tags for SEO & descriptions -->
-    <title>Axon — Custom WebGPU Inference Engine</title>
-    <meta name="description" content="A browser-based LLM inference engine built from scratch using TypeScript and WebGPU compute shaders." />
-  </head>
-  <body>
-    <div id="app">
-      <!-- Header Section -->
-      <header class="app-header">
-        <div class="header-container">
-          <div class="logo-area">
-            <span class="logo-badge">GPU</span>
-            <h1>axon</h1>
-            <span class="logo-sub">Direct Compute Engine</span>
-          </div>
-          <div id="gpu-badge" class="gpu-status waiting">
-            <div class="status-indicator"></div>
-            <span id="gpu-status-text">Querying hardware...</span>
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Premium Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Outfit:wght@300;400;600;700&display=swap"
+    rel="stylesheet">
+
+  <!-- Meta tags for SEO & descriptions -->
+  <title>Axon — Custom WebGPU Inference Engine</title>
+  <meta name="description"
+    content="A browser-based LLM inference engine built from scratch using TypeScript and WebGPU compute shaders." />
+</head>
+
+<body>
+  <div id="app">
+    <!-- Header Section -->
+    <header class="app-header">
+      <div class="header-container">
+        <div class="logo-area">
+          <span class="logo-badge">GPU</span>
+          <h1>axon</h1>
+          <span class="logo-sub">Direct Compute Engine</span>
+        </div>
+        <div id="gpu-badge" class="gpu-status waiting">
+          <div class="status-indicator"></div>
+          <span id="gpu-status-text">Querying hardware...</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Layout Grid -->
+    <main class="dashboard-grid">
+      <!-- GPU Architecture Diagnostics Card -->
+      <section class="card diag-card">
+        <div class="card-header">
+          <h3>GPU Diagnostics</h3>
+          <span class="pill">Hardware WebGPU API</span>
+        </div>
+        <div class="card-body">
+          <div class="diagnostic-grid">
+            <div class="diag-item">
+              <span class="diag-label">Adapter</span>
+              <span id="diag-adapter" class="diag-value">Checking...</span>
+            </div>
+            <div class="diag-item">
+              <span class="diag-label">Architecture</span>
+              <span id="diag-arch" class="diag-value">Checking...</span>
+            </div>
+            <div class="diag-item">
+              <span class="diag-label">Adapter Type</span>
+              <span id="diag-type" class="diag-value">Checking...</span>
+            </div>
+            <div class="diag-item">
+              <span class="diag-label">Device Limits (Max Workgroup Size)</span>
+              <span id="diag-workgroups" class="diag-value">Checking...</span>
+            </div>
           </div>
         </div>
-      </header>
+      </section>
 
-      <!-- Main Layout Grid -->
-      <main class="dashboard-grid">
-        <!-- GPU Architecture Diagnostics Card -->
-        <section class="card diag-card">
-          <div class="card-header">
-            <h3>GPU Diagnostics</h3>
-            <span class="pill">Hardware WebGPU API</span>
+      <!-- Model Weights Loader Card -->
+      <section class="card loader-card">
+        <div class="card-header">
+          <h3>Model Weights Loader</h3>
+          <span class="pill primary">SmolLM2-135M</span>
+        </div>
+        <div class="card-body">
+          <p class="section-desc">Select a local SmolLM2 <code>.safetensors</code> weight file to extract structural
+            headers and allocate parameters on GPU.</p>
+          <div class="loader-controls" style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
+            <input type="file" id="file-weights-input" accept=".safetensors" style="display: none;">
+            <label for="file-weights-input" class="btn-primary"
+              style="display: block; width: 100%; text-align: center; cursor: pointer; padding: 12px; border-radius: 6px; box-sizing: border-box; background: var(--gradient-primary); color: white; font-weight: 500;">
+              Choose weights (.safetensors)
+            </label>
+            <div id="loader-status" class="status-indicator-text"
+              style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 5px;">No model loaded yet.</div>
           </div>
-          <div class="card-body">
-            <div class="diagnostic-grid">
-              <div class="diag-item">
-                <span class="diag-label">Adapter</span>
-                <span id="diag-adapter" class="diag-value">Checking...</span>
+          <div id="loader-details" class="loader-details-panel"
+            style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border-color); display: none; flex-direction: column; gap: 8px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+              <span style="color: var(--text-secondary);">Tensors Detected:</span>
+              <span id="detail-tensors-count" style="color: var(--text-primary); font-weight: 600;">0</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+              <span style="color: var(--text-secondary);">Declared Sizing:</span>
+              <span id="detail-total-size" style="color: var(--text-primary); font-weight: 600;">0.00 MB</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tokenizer Playground Card -->
+      <section class="card tokenizer-card">
+        <div class="card-header">
+          <h3>Tokenizer Playground</h3>
+          <span class="pill primary">SentencePiece BPE</span>
+        </div>
+        <div class="card-body">
+          <p class="section-desc">Load a <code>tokenizer.json</code> file to enable live text encoding/decoding tests.
+          </p>
+          <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
+            <input type="file" id="file-tokenizer-input" accept=".json" style="display: none;">
+            <label for="file-tokenizer-input" class="btn-primary"
+              style="display: block; width: 100%; text-align: center; cursor: pointer; padding: 12px; border-radius: 6px; box-sizing: border-box; background: var(--gradient-primary); color: white; font-weight: 500; margin-bottom: 5px;">
+              Choose tokenizer.json
+            </label>
+            <div id="tokenizer-status" style="font-size: 0.85rem; color: var(--text-secondary);">No tokenizer loaded.
+            </div>
+          </div>
+
+          <div id="tokenizer-io-panel"
+            style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border-color); display: none; flex-direction: column; gap: 12px;">
+            <div class="input-group" style="display: flex; flex-direction: column; gap: 5px;">
+              <label for="tok-input-text" style="font-size: 0.85rem; color: var(--text-secondary);">Input Text:</label>
+              <input type="text" id="tok-input-text" value="Hello, world!"
+                style="width: 100%; box-sizing: border-box; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); padding: 8px; border-radius: 4px;">
+            </div>
+            <div style="font-size: 0.85rem; word-break: break-all;">
+              <strong style="color: var(--text-secondary);">Encoded Token IDs:</strong>
+              <div id="tok-output-ids"
+                style="margin-top: 5px; padding: 10px; border-radius: 6px; background: rgba(0,0,0,0.2); font-family: monospace; border: 1px solid var(--border-color); color: var(--accent-cyan);">
+                []</div>
+            </div>
+            <div style="font-size: 0.85rem; word-break: break-all;">
+              <strong style="color: var(--text-secondary);">Decoded Text:</strong>
+              <div id="tok-output-text"
+                style="margin-top: 5px; padding: 10px; border-radius: 6px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); color: var(--text-primary);">
+                ""</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Verification Test Card (Required 4x4 Output) -->
+      <section class="card test-card">
+        <div class="card-header">
+          <h3>Verification Test</h3>
+          <span class="pill success">Auto-verified</span>
+        </div>
+        <div class="card-body">
+          <p class="section-desc">Multiplying a <strong>4x4 Identity Matrix (A)</strong> by a <strong>4x4 Test Sequence
+              Matrix (B)</strong> using the WGSL matmul shader:</p>
+
+          <div class="matrices-visual">
+            <div class="matrix-box">
+              <span class="matrix-name">Matrix A (4x4 Identity)</span>
+              <div class="matrix-grid dimension-4" id="matrix-a-4x4">
+                <!-- JS populated -->
               </div>
-              <div class="diag-item">
-                <span class="diag-label">Architecture</span>
-                <span id="diag-arch" class="diag-value">Checking...</span>
+            </div>
+
+            <div class="matrix-op">✕</div>
+
+            <div class="matrix-box">
+              <span class="matrix-name">Matrix B (4x4 Sequence)</span>
+              <div class="matrix-grid dimension-4" id="matrix-b-4x4">
+                <!-- JS populated -->
               </div>
-              <div class="diag-item">
-                <span class="diag-label">Adapter Type</span>
-                <span id="diag-type" class="diag-value">Checking...</span>
-              </div>
-              <div class="diag-item">
-                <span class="diag-label">Device Limits (Max Workgroup Size)</span>
-                <span id="diag-workgroups" class="diag-value">Checking...</span>
+            </div>
+
+            <div class="matrix-op">=</div>
+
+            <div class="matrix-box output-box">
+              <span class="matrix-name highlight">Output C (GPU Result)</span>
+              <div class="matrix-grid dimension-4" id="matrix-c-4x4">
+                <div class="spinner"></div>
               </div>
             </div>
           </div>
-        </section>
 
-        <!-- Model Weights Loader Card -->
-        <section class="card loader-card">
-          <div class="card-header">
-            <h3>Model Weights Loader</h3>
-            <span class="pill primary">SmolLM2-135M</span>
+          <div class="execution-feedback">
+            <span class="title">Verification console feedback:</span>
+            <pre class="console-output" id="test-console">Pending WebGPU compilation...</pre>
           </div>
-          <div class="card-body">
-            <p class="section-desc">Select a local SmolLM2 <code>.safetensors</code> weight file to extract structural headers and allocate parameters on GPU.</p>
-            <div class="loader-controls" style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
-              <input type="file" id="file-weights-input" accept=".safetensors" style="display: none;">
-              <label for="file-weights-input" class="btn-primary" style="display: block; width: 100%; text-align: center; cursor: pointer; padding: 12px; border-radius: 6px; box-sizing: border-box; background: var(--gradient-primary); color: white; font-weight: 500;">
-                Choose weights (.safetensors)
-              </label>
-              <div id="loader-status" class="status-indicator-text" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 5px;">No model loaded yet.</div>
-            </div>
-            <div id="loader-details" class="loader-details-panel" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border-color); display: none; flex-direction: column; gap: 8px;">
-              <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
-                <span style="color: var(--text-secondary);">Tensors Detected:</span>
-                <span id="detail-tensors-count" style="color: var(--text-primary); font-weight: 600;">0</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
-                <span style="color: var(--text-secondary);">Declared Sizing:</span>
-                <span id="detail-total-size" style="color: var(--text-primary); font-weight: 600;">0.00 MB</span>
-              </div>
-            </div>
-          </div>
-        </section>
+        </div>
+      </section>
 
-        <!-- Verification Test Card (Required 4x4 Output) -->
-        <section class="card test-card">
-          <div class="card-header">
-            <h3>Verification Test</h3>
-            <span class="pill success">Auto-verified</span>
+      <!-- Matrix Playground Card (Interactive Custom Dimensions) -->
+      <section class="card playground-card">
+        <div class="card-header">
+          <h3>Kernel Playground</h3>
+          <span class="pill interactive">Interactive</span>
+        </div>
+        <div class="card-body">
+          <p class="section-desc">Benchmark matrix multiplication with arbitrary sizes. Generates randomized matrices in
+            float32 layout.</p>
+
+          <div class="playground-controls">
+            <div class="input-group">
+              <label for="input-m">M (Rows A / C)</label>
+              <input type="number" id="input-m" min="4" max="256" value="16" step="4">
+            </div>
+            <div class="input-group">
+              <label for="input-k">K (Cols A / Rows B)</label>
+              <input type="number" id="input-k" min="4" max="256" value="16" step="4">
+            </div>
+            <div class="input-group">
+              <label for="input-n">N (Cols B / C)</label>
+              <input type="number" id="input-n" min="4" max="256" value="16" step="4">
+            </div>
+            <button id="btn-run-matmul" class="btn-primary">
+              <span>Run GPU Kernel</span>
+            </button>
           </div>
-          <div class="card-body">
-            <p class="section-desc">Multiplying a <strong>4x4 Identity Matrix (A)</strong> by a <strong>4x4 Test Sequence Matrix (B)</strong> using the WGSL matmul shader:</p>
-            
-            <div class="matrices-visual">
-              <div class="matrix-box">
-                <span class="matrix-name">Matrix A (4x4 Identity)</span>
-                <div class="matrix-grid dimension-4" id="matrix-a-4x4">
+
+          <div class="playground-result-container">
+            <div class="metrics-row">
+              <div class="metric-block">
+                <span class="metric-label">Execution Time</span>
+                <span id="metric-time" class="metric-value">-- ms</span>
+              </div>
+              <div class="metric-block">
+                <span class="metric-label">Memory Dispatched</span>
+                <span id="metric-memory" class="metric-value">-- bytes</span>
+              </div>
+              <div class="metric-block">
+                <span class="metric-label">Grid Size (X, Y, Z)</span>
+                <span id="metric-grid" class="metric-value">--</span>
+              </div>
+            </div>
+
+            <div id="playground-matrix-scroll" class="matrix-preview-grid-wrapper hidden">
+              <div class="preview-matrix-block">
+                <span class="matrix-name">Sample Outputs of C (Top 8x8)</span>
+                <div class="matrix-grid" id="matrix-playground-c">
                   <!-- JS populated -->
                 </div>
               </div>
-              
-              <div class="matrix-op">✕</div>
-
-              <div class="matrix-box">
-                <span class="matrix-name">Matrix B (4x4 Sequence)</span>
-                <div class="matrix-grid dimension-4" id="matrix-b-4x4">
-                  <!-- JS populated -->
-                </div>
-              </div>
-
-              <div class="matrix-op">=</div>
-
-              <div class="matrix-box output-box">
-                <span class="matrix-name highlight">Output C (GPU Result)</span>
-                <div class="matrix-grid dimension-4" id="matrix-c-4x4">
-                  <div class="spinner"></div>
-                </div>
-              </div>
-            </div>
-
-            <div class="execution-feedback">
-              <span class="title">Verification console feedback:</span>
-              <pre class="console-output" id="test-console">Pending WebGPU compilation...</pre>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <!-- Matrix Playground Card (Interactive Custom Dimensions) -->
-        <section class="card playground-card">
-          <div class="card-header">
-            <h3>Kernel Playground</h3>
-            <span class="pill interactive">Interactive</span>
-          </div>
-          <div class="card-body">
-            <p class="section-desc">Benchmark matrix multiplication with arbitrary sizes. Generates randomized matrices in float32 layout.</p>
-            
-            <div class="playground-controls">
-              <div class="input-group">
-                <label for="input-m">M (Rows A / C)</label>
-                <input type="number" id="input-m" min="4" max="256" value="16" step="4">
-              </div>
-              <div class="input-group">
-                <label for="input-k">K (Cols A / Rows B)</label>
-                <input type="number" id="input-k" min="4" max="256" value="16" step="4">
-              </div>
-              <div class="input-group">
-                <label for="input-n">N (Cols B / C)</label>
-                <input type="number" id="input-n" min="4" max="256" value="16" step="4">
-              </div>
-              <button id="btn-run-matmul" class="btn-primary">
-                <span>Run GPU Kernel</span>
-              </button>
-            </div>
+      <!-- WGSL Shader Code Viewer -->
+      <section class="card code-card">
+        <div class="card-header">
+          <h3>matmul.wgsl</h3>
+          <span class="pill code">Raw WebGPU Shader Code</span>
+        </div>
+        <div class="card-body scroll-body">
+          <pre class="shader-code-view"><code id="code-display">// Loading shader...</code></pre>
+        </div>
+      </section>
+    </main>
 
-            <div class="playground-result-container">
-              <div class="metrics-row">
-                <div class="metric-block">
-                  <span class="metric-label">Execution Time</span>
-                  <span id="metric-time" class="metric-value">-- ms</span>
-                </div>
-                <div class="metric-block">
-                  <span class="metric-label">Memory Dispatched</span>
-                  <span id="metric-memory" class="metric-value">-- bytes</span>
-                </div>
-                <div class="metric-block">
-                  <span class="metric-label">Grid Size (X, Y, Z)</span>
-                  <span id="metric-grid" class="metric-value">--</span>
-                </div>
-              </div>
+    <footer class="app-footer">
+      <p>Built from scratch with zero ML libraries. Axon LLM core framework.</p>
+    </footer>
+  </div>
 
-              <div id="playground-matrix-scroll" class="matrix-preview-grid-wrapper hidden">
-                <div class="preview-matrix-block">
-                  <span class="matrix-name">Sample Outputs of C (Top 8x8)</span>
-                  <div class="matrix-grid" id="matrix-playground-c">
-                    <!-- JS populated -->
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+  <!-- Core App Module -->
+  <script type="module" src="/src/main.ts"></script>
+</body>
 
-        <!-- WGSL Shader Code Viewer -->
-        <section class="card code-card">
-          <div class="card-header">
-            <h3>matmul.wgsl</h3>
-            <span class="pill code">Raw WebGPU Shader Code</span>
-          </div>
-          <div class="card-body scroll-body">
-            <pre class="shader-code-view"><code id="code-display">// Loading shader...</code></pre>
-          </div>
-        </section>
-      </main>
-
-      <footer class="app-footer">
-        <p>Built from scratch with zero ML libraries. Axon LLM core framework.</p>
-      </footer>
-    </div>
-
-    <!-- Core App Module -->
-    <script type="module" src="/src/main.ts"></script>
-  </body>
 </html>

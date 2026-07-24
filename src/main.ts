@@ -14,6 +14,7 @@ import {
 } from './kernels/ops';
 import { precomputeRoPETables, rope } from './kernels/rope';
 import { parseSafetensorsHeader, loadWeightsToGPU } from './model/loader';
+import { Tokenizer } from './tokenizer/tokenizer';
 import matmulShader from './shaders/matmul.wgsl?raw';
 
 // Get DOM elements
@@ -34,6 +35,13 @@ const loaderStatus = document.getElementById('loader-status');
 const loaderDetails = document.getElementById('loader-details');
 const detailTensorsCount = document.getElementById('detail-tensors-count');
 const detailTotalSize = document.getElementById('detail-total-size');
+
+const fileTokenizerInput = document.getElementById('file-tokenizer-input') as HTMLInputElement;
+const tokenizerStatus = document.getElementById('tokenizer-status');
+const tokenizerIOPanel = document.getElementById('tokenizer-io-panel');
+const tokInputText = document.getElementById('tok-input-text') as HTMLInputElement;
+const tokOutputIds = document.getElementById('tok-output-ids');
+const tokOutputText = document.getElementById('tok-output-text');
 
 const inputM = document.getElementById('input-m') as HTMLInputElement;
 const inputK = document.getElementById('input-k') as HTMLInputElement;
@@ -475,6 +483,116 @@ async function runApplication() {
       };
 
       reader.readAsArrayBuffer(file);
+    });
+  }
+
+  // -------------------------------------------------------------
+  // TOKENIZER FILE UPLOAD & RE-TOKENIZATION PLAYGROUND
+  // -------------------------------------------------------------
+  let activeTokenizer: Tokenizer | null = null;
+
+  function updateTokenizerDisplay() {
+    if (!activeTokenizer || !tokInputText) return;
+
+    const text = tokInputText.value;
+    try {
+      const ids = activeTokenizer.encode(text);
+      const decoded = activeTokenizer.decode(ids);
+
+      if (tokOutputIds) {
+        tokOutputIds.textContent = `[${ids.join(', ')}]`;
+      }
+      if (tokOutputText) {
+        tokOutputText.textContent = `"${decoded}"`;
+      }
+    } catch (err: any) {
+      console.error("Tokenization run failed:", err);
+      if (tokOutputIds) tokOutputIds.textContent = "Error";
+      if (tokOutputText) tokOutputText.textContent = err.message;
+    }
+  }
+
+  if (fileTokenizerInput) {
+    fileTokenizerInput.addEventListener('change', async () => {
+      const files = fileTokenizerInput.files;
+      if (!files || files.length === 0) return;
+
+      const file = files[0];
+      if (tokenizerStatus) {
+        tokenizerStatus.textContent = `Reading "${file.name}"...`;
+        tokenizerStatus.style.color = 'var(--text-secondary)';
+      }
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const textData = e.target?.result as string;
+        if (!textData) {
+          if (tokenizerStatus) {
+            tokenizerStatus.textContent = "Error: Failed to read tokenizer configurations.";
+            tokenizerStatus.style.color = 'var(--accent-error)';
+          }
+          return;
+        }
+
+        try {
+          if (tokenizerStatus) tokenizerStatus.textContent = "Loading vocabulary maps...";
+          const parsed = JSON.parse(textData);
+
+          activeTokenizer = await Tokenizer.fromJSON(parsed);
+          (window as any).loadedTokenizer = activeTokenizer; // Cache globally
+
+          if (tokenizerStatus) {
+            tokenizerStatus.textContent = `Tokenizer Loaded Successfully!`;
+            tokenizerStatus.style.color = '#10b981'; // Green
+          }
+
+          if (tokenizerIOPanel) {
+            tokenizerIOPanel.style.display = 'flex';
+          }
+
+          // Verification check requested: Hello, world!
+          const testText = "Hello, world!";
+          const ids = activeTokenizer.encode(testText);
+          const roundtrip = activeTokenizer.decode(ids);
+          const roundtripMatch = roundtrip === testText;
+
+          console.log("-----------------------------------------");
+          console.log("TOKENIZER BPE ROUNDTRIP VERIFICATION:");
+          console.log(`Original: "${testText}"`);
+          console.log(`Encoded Token IDs:`, ids);
+          console.log(`Decoded: "${roundtrip}"`);
+          console.log(`Round-trip match verified? ${roundtripMatch ? 'SUCCESS (TRUE)' : 'FAIL (FALSE)'}`);
+          console.log("-----------------------------------------");
+
+          // Run active input updates
+          updateTokenizerDisplay();
+
+        } catch (err: any) {
+          console.error("Tokenizer loading error:", err);
+          if (tokenizerStatus) {
+            tokenizerStatus.textContent = `Error: ${err.message}`;
+            tokenizerStatus.style.color = 'var(--accent-error)';
+          }
+        }
+      };
+
+      reader.onerror = () => {
+        if (tokenizerStatus) {
+          tokenizerStatus.textContent = "Error reading tokenizer file.";
+          tokenizerStatus.style.color = 'var(--accent-error)';
+        }
+      };
+
+      reader.readAsText(file);
+    });
+  }
+
+  // Live tokenizer typing inputs listener
+  if (tokInputText) {
+    tokInputText.addEventListener('input', () => {
+      if (activeTokenizer) {
+        updateTokenizerDisplay();
+      }
     });
   }
 }
